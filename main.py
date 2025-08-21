@@ -15,6 +15,7 @@ print(f"CSV_PATH: {CSV_PATH}")
 app = Flask(__name__)
 app.secret_key = "test"
 def append_document(csv_path: Path, name: str, rel_path: str, category: str):
+    #append to CSV file
     new_file = not csv_path.exists()
     with csv_path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Name", "Path", "Category"])
@@ -27,7 +28,7 @@ def append_document(csv_path: Path, name: str, rel_path: str, category: str):
         })
 
 def read_documents(csv_path: Path):
-
+    #read data from CSV file
     docs = []
     with csv_path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f) 
@@ -44,6 +45,7 @@ def read_documents(csv_path: Path):
             })
     return docs
 def write_documents(csv_path: Path, docs: list[dict]):
+    #write to CSV file
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Name", "Path", "Category"])
         writer.writeheader()
@@ -58,12 +60,14 @@ def write_documents(csv_path: Path, docs: list[dict]):
 def index():
     docs = read_documents(CSV_PATH)
     for idx, d in enumerate(docs):
+        #assign index and URL for each document
         d["idx"] = idx
         d["url"] = url_for("serve_file", subpath=d["rel_path"])
     return render_template_string(INDEX_HTML, docs=docs)
 
 @app.route("/files/<path:subpath>")
 def serve_file(subpath: str):
+    #return file from Docs/ directory
     safe_path = subpath.replace("\\", "/")
 
     inside_docs = safe_path.split("/", 1)[1] if "/" in safe_path else ""
@@ -71,7 +75,7 @@ def serve_file(subpath: str):
     return send_from_directory(DOCS_ROOT, inside_docs, as_attachment=False)
 @app.route("/delete", methods=["POST"])
 def delete_doc():
-
+    """Delete a document by index."""
     try:
         idx = int(request.form.get("idx", "-1"))
     except ValueError:
