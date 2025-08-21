@@ -2,7 +2,7 @@ from pathlib import Path
 import csv
 from flask import (
     Flask, url_for, send_from_directory,
-    render_template_string, abort
+    render_template_string, abort, request, flash, redirect
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -12,14 +12,13 @@ DOCS_ROOT = BASE_DIR / "Docs"
 print(f"CSV_PATH: {CSV_PATH}")
 
 app = Flask(__name__)
-
+app.secret_key = "test"
 def read_documents(csv_path: Path):
 
     docs = []
     with csv_path.open(newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)  # default delimiter = ","
+        reader = csv.DictReader(f) 
         for row in reader:
-            print(f"Processing row: {row}")  # Debugging
             name = (row.get("Name") or "").strip()
             rel_path = (row.get("Path") or "").replace("\\", "/").strip()
             category = (row.get("Category") or "").strip()
@@ -31,11 +30,22 @@ def read_documents(csv_path: Path):
                 "category": category
             })
     return docs
+def write_documents(csv_path: Path, docs: list[dict]):
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["Name", "Path", "Category"])
+        writer.writeheader()
+        for d in docs:
+            writer.writerow({
+                "Name": d["name"],
+                "Path": d["rel_path"].replace("/", "\\"),
+                "Category": d["category"]
+            })
 
 @app.route("/", methods=["GET"])
 def index():
     docs = read_documents(CSV_PATH)
-    for d in docs:
+    for idx, d in enumerate(docs):
+        d["idx"] = idx
         d["url"] = url_for("serve_file", subpath=d["rel_path"])
     return render_template_string(INDEX_HTML, docs=docs)
 
@@ -46,7 +56,27 @@ def serve_file(subpath: str):
     inside_docs = safe_path.split("/", 1)[1] if "/" in safe_path else ""
 
     return send_from_directory(DOCS_ROOT, inside_docs, as_attachment=False)
+@app.route("/delete", methods=["POST"])
+def delete_doc():
 
+    try:
+        idx = int(request.form.get("idx", "-1"))
+    except ValueError:
+        flash("Invalid delete request.", "error")
+        return redirect(url_for("index"))
+
+    docs = read_documents(CSV_PATH)
+    if idx < 0 or idx >= len(docs):
+        flash("Document not found.", "error")
+        return redirect(url_for("index"))
+
+    doc = docs.pop(idx)
+    # Rewrite CSV without this entry
+    write_documents(CSV_PATH, docs)
+
+
+    flash("Document deleted.", "success")
+    return redirect(url_for("index"))
 # ---------- Inline template ----------
 INDEX_HTML = """
 <!doctype html>
@@ -78,6 +108,12 @@ INDEX_HTML = """
         <td><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.name }}</a></td>
         <td class="muted">{{ d.rel_path }}</td>
         <td class="cat">{{ d.category }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('delete_doc') }}" onsubmit="return confirm('Delete this document?');" style="display:inline;">
+            <input type="hidden" name="idx" value="{{ d.idx }}">
+            <button type="submit" title="Delete">Delete</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
