@@ -2,6 +2,7 @@
 ```bash
 pip install -r requirements.txt
 python main.py
+```
 version:3.13.1
 
 
